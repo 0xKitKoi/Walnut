@@ -39,6 +39,8 @@ struct SaveData { // Default settings. Change to microcontroller IP:PORT
 
 }m_SaveData;
 
+ImVec2 BackBuffer(90, 90);
+
 
 DWORD WINAPI receiveThread(LPVOID lpParam) {
 	SOCKET clientSocket = reinterpret_cast<SOCKET>(lpParam);
@@ -389,12 +391,24 @@ public:
 
 			ImGui::Text("Hold Left Click over the image to Send coords!");
 			ImVec2 imagePos = ImGui::GetCursorScreenPos();
-			ImGui::Image(m_Image->GetDescriptorSet(), { 400, 400 });
+			ImGui::Image(m_Image->GetDescriptorSet(), { 550, 550 });
 
 
 			ImVec2 pos = ImGui::GetMousePos();
 			// Position of mouse cursor relative to image, then scaled by 180 degrees of rotation for the servo motor.
 			ImVec2 relativePos = ImVec2((pos.x - imagePos.x) / (m_Image->GetHeight() / 180), (pos.y - imagePos.y) / (m_Image->GetWidth() / 180));
+			if (relativePos.x > 180) {
+				relativePos.x = 180;
+			}
+			if (relativePos.y > 180) {
+				relativePos.y = 180;
+			}
+			if (relativePos.x < 0) {
+				relativePos.x = 0;
+			}
+			if (relativePos.y < 0) {
+				relativePos.y = 0;
+			}
 			ImGui::Text("Coords are sent over serial as: (X%uY%u)", (int)relativePos.x, (int)relativePos.y);
 
 
@@ -403,38 +417,44 @@ public:
 				//printf("Holding mouse button down.\n");
 				// Michael's arduino parses this to control two servo motors for Pan And Yaw. Yee Haw.
 				//char coords[10];
-				std::string temp;
-				temp += "\\"; // this is a custom command format, the microcontroller will parse this for the ints.
-				temp += "X";
-				temp += std::to_string((int)relativePos.x);
-				temp += "Y";
-				temp += std::to_string((int)relativePos.y);
-				temp += "\n";
-				temp += '\0';
+				if (BackBuffer.x != relativePos.x || BackBuffer.y != relativePos.y) {
+					BackBuffer.x = relativePos.x;
+					BackBuffer.y = relativePos.y;
+					//}
+					std::string temp;
+					temp += "\\"; // this is a custom command format, the microcontroller will parse this for the ints.
+					temp += "X";
+					temp += std::to_string((int)relativePos.x);
+					temp += "Y";
+					temp += std::to_string((int)relativePos.y);
+					temp += "\n";
+					temp += '\0';
 
-				unsigned char* charArray = new unsigned char[temp.size()];
-				std::memcpy(charArray, temp.c_str(), temp.size());
-				// Send Mouse Position over Serial.
-				if (!m_NetworkMode) {
-					//RS232_SendBuf(m_ComPorts.at(m_SelectedPort) - 1, charArray, temp.size());
-					//RS232_cputs(m_ComPorts.at(m_SelectedPort) - 1, temp.c_str());
+					unsigned char* charArray = new unsigned char[temp.size()];
+					std::memcpy(charArray, temp.c_str(), temp.size());
+					// Send Mouse Position over Serial.
+					//if (!m_NetworkMode) {
+						//RS232_SendBuf(m_ComPorts.at(m_SelectedPort) - 1, charArray, temp.size());
+						//RS232_cputs(m_ComPorts.at(m_SelectedPort) - 1, temp.c_str());
 
 					int e = RS232_SendBuf(m_ComPorts.at(m_SelectedPort) - 1, charArray, temp.size());
 					//RS232_cputs((m_ComPorts.at(m_SelectedPort) - 1), m_UserInput);
 
 					if (e < 0) {
 						printf("\nWriting failed! Port: %d", m_ComPorts.at(m_SelectedPort) - 1);
-						printf("\n%.*s", temp.size(), m_UserInput);
+						printf("\n%s", m_UserInput);
 					}
-					printf("\nWrote %d bytes (%s) on Comport %d", e , temp, m_ComPorts.at(m_SelectedPort) - 1);
-				}
-				else {
-					// Send over Network:
-					std::lock_guard<std::mutex> lock(queueMutex);
-					messageQueue.push(temp.c_str());
-				}
+					// printf("\nWrote %d bytes (%.*s) on Comport %d", e, static_cast<int>(temp.size()), temp.c_str(), m_ComPorts.at(m_SelectedPort));
 
-				std::this_thread::sleep_for(std::chrono::milliseconds(50)); // Dont Overload the Microcontroller!!!!
+				}
+				//}
+				//else {
+					// Send over Network:
+				//	std::lock_guard<std::mutex> lock(queueMutex);
+				//	messageQueue.push(temp.c_str());
+				//}
+
+				std::this_thread::sleep_for(std::chrono::milliseconds(150)); // Dont Overload the Microcontroller!!!!
 			}
 
 		}
