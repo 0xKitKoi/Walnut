@@ -305,7 +305,9 @@ public:
 						//HANDLE hReadThread = CreateThread(NULL, 0, receiveThread, (LPVOID)ConnectSocket, 0, NULL);
 						//HANDLE hSendThread = CreateThread(NULL, 0, sendThread, (LPVOID)ConnectSocket, 0, NULL);
 						std::thread recvThread(&receiveThread, static_cast<void*>(&ConnectSocket));
+						recvThread.detach();
 						std::thread sendThread(&sendThread, static_cast<void*>(&ConnectSocket));
+						sendThread.detach();
 						connectionAquired = true;
 					}
 				}
@@ -334,7 +336,7 @@ public:
 						// Attempt to connect to Selected Serial Port.
 						char mode[] = { '8','N','1',0 }; // Serial port config. this sets bit mode & parity. 
 
-						if (RS232_OpenComport(m_ComPorts.at(m_SelectedPort) -1 , 115200, mode, 0)) // (ComPort, Baudrate, mode, flowcontrol)
+						if (RS232_OpenComport(m_ComPorts.at(m_SelectedPort) -1, 115200, mode, 0)) // (ComPort, Baudrate, mode, flowcontrol)
 						{
 							//printf("Can not open comport COM%i\n", m_ComPorts.at(m_SelectedPort));
 							ErrorMsg = "Can not open comport COM" + std::to_string(m_ComPorts.at(m_SelectedPort) - 1);
@@ -428,7 +430,7 @@ public:
 					temp += "Y";
 					temp += std::to_string((int)relativePos.y);
 					temp += "\n";
-					temp += '\0';
+					//temp += '\0';
 
 					unsigned char* charArray = new unsigned char[temp.size()];
 					std::memcpy(charArray, temp.c_str(), temp.size());
@@ -436,16 +438,22 @@ public:
 					//if (!m_NetworkMode) {
 						//RS232_SendBuf(m_ComPorts.at(m_SelectedPort) - 1, charArray, temp.size());
 						//RS232_cputs(m_ComPorts.at(m_SelectedPort) - 1, temp.c_str());
+					if (m_NetworkMode) {
+						// Send over Network:
+						std::lock_guard<std::mutex> lock(queueMutex);
+						messageQueue.push(temp.c_str());
+					}
+					else {
+						int e = RS232_SendBuf(m_ComPorts.at(m_SelectedPort) - 1, charArray, temp.size());
+						//RS232_cputs((m_ComPorts.at(m_SelectedPort) - 1), m_UserInput);
 
-					int e = RS232_SendBuf(m_ComPorts.at(m_SelectedPort) - 1, charArray, temp.size());
-					//RS232_cputs((m_ComPorts.at(m_SelectedPort) - 1), m_UserInput);
-
-					if (e < 0) {
-						printf("\nWriting failed! Port: %d", m_ComPorts.at(m_SelectedPort) - 1);
-						printf("\n%s", m_UserInput);
+						if (e < 0) {
+							printf("\nWriting failed! Port: %d", m_ComPorts.at(m_SelectedPort) - 1);
+							printf("\n%s", m_UserInput);
+						}
 					}
 					// printf("\nWrote %d bytes (%.*s) on Comport %d", e, static_cast<int>(temp.size()), temp.c_str(), m_ComPorts.at(m_SelectedPort));
-
+					delete[] charArray;
 				}
 				//}
 				//else {
@@ -527,8 +535,8 @@ public:
 						break;
 					}
 				}
-				m_UserInput[i] = '\n';
-				m_UserInput[i + 1] = '\0';
+				//m_UserInput[i] = '\n';
+				//m_UserInput[i + 1] = '\0';
 				printf("\n%d byte DUMP:", i);
 				printf("\n%.*s", i, m_UserInput);
 				// We have user input, send over user selected protocol
